@@ -810,6 +810,13 @@ coverage in percent); other codes are derived:
   either as the mean of the colours, or by *overprinting* (every component
   ink at full strength, multiplying transmittance on screen);
 - **soft-masked bases** are faded towards paper white by a fixed fraction.
+  N and "no base" are not faded.
+
+N (not known) has a colour unlike every base and every mixture, faded or
+not, so that an unknown base is never mistaken for a heterozygous site. The
+`classic` and `okabe-ito` palettes draw it near-black, because their
+mixtures include greys: in `classic`, C (blue) and T (yellow) average to
+mid-grey.
 
 | Palette | A | C | G | T | Mix | Notes |
 |---|---|---|---|---|---|---|
@@ -893,6 +900,11 @@ While version 0.1 is a draft it may still be clarified. Changes so far:
   `ps` without PHASED, `sample` required with genotypes, printable ASCII
   names, digests of the decoded sequence). Codes, planes and the container
   are unchanged; files written by gpxiltools 0.1.0 remain readable.
+- **28 October 2026**: N became near-black in the `classic` and `okabe-ito`
+  palettes and is no longer faded for soft-masking, so that it differs from
+  every base and mixture (12.2, A.4). In `classic`, a mid-grey N was exactly
+  the colour of a heterozygous C/T site. Palettes are rendering choices:
+  files are unchanged.
 
 ## 15. References
 
@@ -953,7 +965,7 @@ sRGB as 0-255 triples; CMYK as ink percentages.
 | | C | 0 0 255 | 100 80 0 0 |
 | | G | 0 255 0 | 80 0 100 0 |
 | | T | 255 255 0 | 0 0 100 0 |
-| | N | 128 128 128 | 0 0 0 50 |
+| | N | 32 32 32 | 0 0 0 90 |
 | gpxi | A | 0 0 0 | 0 0 0 100 |
 | | C | 85 85 85 | 0 0 0 67 |
 | | G | 255 255 255 | 0 0 0 0 |
@@ -963,7 +975,7 @@ sRGB as 0-255 triples; CMYK as ink percentages.
 | | C | 0 114 178 | 100 50 0 0 |
 | | G | 230 159 0 | 0 50 100 0 |
 | | T | 213 94 0 | 0 80 100 0 |
-| | N | 153 153 153 | 0 0 0 40 |
+| | N | 32 32 32 | 0 0 0 90 |
 | process | A | 0 174 239 | 100 0 0 0 |
 | | C | 236 0 140 | 0 100 0 0 |
 | | G | 255 242 0 | 0 0 100 0 |
@@ -973,8 +985,8 @@ sRGB as 0-255 triples; CMYK as ink percentages.
 "No base" is paper: sRGB 255 255 255, no ink (the `gpxi` palette tints it
 255 250 230 / 0 2 10 0 so that it differs from G). Soft-masked bases are faded
 45 % towards paper in sRGB and their ink reduced by 45 % in CMYK (`gpxi`: no
-fade). sRGB values of the `process` palette are screen approximations of the
-inks.
+fade); N and "no base" are never faded. sRGB values of the `process` palette
+are screen approximations of the inks.
 
 ## Appendix B: worked example
 
