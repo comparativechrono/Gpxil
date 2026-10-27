@@ -264,7 +264,10 @@ to 2^32−1 it MUST be stored as is. Other phase-set identifiers MUST be
 replaced by distinct values not otherwise used on the contig, and the writer
 MUST record the mapping in the contig's `phase_set_ids` metadata. Writers
 SHOULD take these values downwards from 2^32−1, skipping values in use, in
-order of first appearance, so that the result is reproducible. When a contig
+order of first appearance in the VCF, so that the result is reproducible;
+an identifier that ends up on no base (because other calls took all of its
+bases, section 6.5) is dropped. Integer identifiers are compared as integers
+(`077` is 77). When a contig
 has phased calls but no `ps` plane, all its phased calls belong to one phase
 set (as for phasing from a diploid assembly or a trio).
 
@@ -299,11 +302,13 @@ Before any call is applied, in this order:
 These initial states are not *asserted* (section 6.4). The metadata MUST say
 which callable and haploid regions were applied (section 9.4).
 
-A contig on which the VCF has no records and which has no callable interval
-(because no callable regions were given, or because they do not mention the
+A contig on which the VCF has no records and which no callable interval
+overlaps (because no callable regions were given, or none lies on the
 contig) carries no information about the sample: the default of step 1
 would claim that the person matches the reference there. Writers MUST NOT
-give such a contig a `gt` plane; it is stored as reference only. (Without a
+give such a contig a `gt` plane; it is stored as reference only, or, by a
+writer told not to store the reference, left out and SHOULD be listed in
+the metadata. (Without a
 callable-regions file, a VCF that lists only variant sites is taken to mean
 REF wherever a contig *with* calls has none, the convention of
 `bcftools consensus`.)
@@ -329,8 +334,9 @@ follows:
 - `.` (missing): UNKNOWN over the span.
 - `*` (spanning deletion): nothing is written; the deletion is described by
   the record that starts it (see also section 6.5).
-- an allele number with no matching ALT allele: nothing is written; the
-  writer counts it (`bad_allele_index`).
+- an allele number with no matching ALT allele (negative, or larger than
+  the number of ALT alleles) or that is not a number: nothing is written;
+  the writer counts it (`bad_allele_index`).
 - a sequence allele `ALT`:
   1. Trim the longest common suffix of REF and ALT, except that when the
      lengths differ the trim MUST stop before consuming the whole shorter
@@ -339,7 +345,10 @@ follows:
      length.
   3. The remaining cores `r` (from REF) and `a` (from ALT) start at offset
      `p + k`. For `j < min(|r|, |a|)`, where `r[j] ≠ a[j]` the state at
-     `p + k + j` is the base `a[j]` (UNKNOWN if `a[j]` is not A, C, G or T).
+     `p + k + j` is the base `a[j]`, with `U` read as `T`, or UNKNOWN if
+     `a[j]` is not A, C, G, T or U. If that base is the reference base at
+     the offset (possible only when the record's REF disagrees with the
+     reference), the state is REF, and it is written as REF (section 6.4).
   4. If `a` is longer, the surplus `a[|r|:]` is an insertion after offset
      `p + k + |r| − 1` (section 7 gives how its bases are stored).
   5. If `r` is longer, offsets `p + k + |a| .. p + k + |r| − 1` are DEL.
@@ -367,15 +376,22 @@ breakend (starts or ends with `.`, as in `G.` or `.G`).
   block: with `INFO/END` it covers `[p, END)`, and its `0` alleles assert REF
   over that span. A haplotype whose allele *is* one of them is UNKNOWN over
   the span.
-- `<DEL>` and its subtypes (`<DEL:ME>` …): the bases at offsets `p+1 .. END−1`
-  are DEL (POS is the padding base before the deletion, by VCF convention).
-  Without `INFO/END`, the allele's own `INFO/SVLEN` value (one per ALT
-  allele) gives `END = POS + |SVLEN|`; with neither, the allele is treated
-  as below.
+- `<DEL>` and its subtypes (`<DEL:ME>` …): POS is the padding base before
+  the deletion, by VCF convention, so offset `p` is REF and offsets
+  `p+1 .. END−1` are DEL. Without `INFO/END`, the allele's own `INFO/SVLEN`
+  value (one per ALT allele) gives `END = POS + |SVLEN|`. With neither, or
+  with an END that is not after POS, the allele is treated as below.
 - Any other symbolic allele, including breakends and single breakends: the
-  haplotype is COMPLEX at offset `p` only, and a COMPLEX sidecar entry
-  records the allele (sections 6.6 and 7). `SVLEN` of these alleles (the
-  length of an insertion or duplication, say) does not change the span.
+  haplotype is COMPLEX at offset `p`, and a COMPLEX sidecar entry records
+  the allele (sections 6.6 and 7). This is all the allele asserts: what the
+  haplotype carries over the rest of the span (an inverted or duplicated
+  sequence, say) cannot be written per base, so those bases keep their
+  initial state unless other calls set them, and the entry's `END` tells
+  readers how far the allele reaches. `SVLEN` of these alleles (the length
+  of an insertion or duplication, say) does not change the span.
+
+Every other allele of a record with a symbolic allele (`0`, `.`, a sequence
+allele) covers the record's whole span, as in section 6.2.
 
 ### 6.4 Precedence
 
@@ -414,9 +430,11 @@ statement; writers SHOULD count such bases (`ploidy_mismatches`).
   `|1` or `/0|1`) is dropped before the alleles are read.
 - A missing genotype (`.`, empty, or no `GT` field) leaves the number of
   alleles unknown: both haplotypes are UNKNOWN over the span, except that a
-  base whose haplotype 2 is ABSENT stays ABSENT. Being weak, this never
-  erases another call's variant. Writers SHOULD count such records
-  (`missing_genotypes`).
+  base whose haplotype 2 is ABSENT keeps it, without this call asserting it.
+  Being weak, this never erases another call's variant. Writers SHOULD
+  count such records (`missing_genotypes`). With a leading phase indicator
+  (`|.`) the genotype has one allele, so it is a haploid call whose allele
+  is missing, not a missing genotype.
 - A genotype with one allele (`0`, `1`, …) is haploid: haplotype 2 is
   ABSENT over the span. Genotypes with more than two alleles MUST be skipped
   and counted (`polyploid_skipped`).
@@ -434,10 +452,11 @@ statement; writers SHOULD count such bases (`ploidy_mismatches`).
 - `gq` and `dp` take `FORMAT/GQ` and `FORMAT/DP` (capped at 254, negative
   values stored as 0); `ps` takes `FORMAT/PS` of phased diploid calls
   (section 5.5). Each is written over the span of the call. Where several
-  calls with the field cover a base, one that wrote a strong state to the
-  base, on either haplotype, takes precedence over those that did not; among
-  equals the later one wins. Bases no call with the field covers keep the
-  missing value (255 for `gq` and `dp`, 0 for `ps`).
+  calls with the field cover a base, one that changed the base (wrote a
+  strong state to it on either haplotype, or an insertion after it) takes
+  precedence over those that did not; among equals the later one wins.
+  Bases no call with the field covers keep the missing value (255 for `gq`
+  and `dp`, 0 for `ps`).
 
 ### 6.6 COMPLEX
 
@@ -451,10 +470,11 @@ what is known about the allele in the entry.
 ### 6.7 Reference checks
 
 Writers MUST check each REF allele against the reference and MUST count
-mismatches in the metadata (`ref_mismatches`). A REF base matches when its
-IUPAC set and the reference base's set intersect, so N matches anything and
-R (A or G) matches A or G; a character that is not an IUPAC letter never
-matches. Writers MAY reject files with mismatches.
+mismatches in the metadata (`ref_mismatches`). A REF base matches when it
+is an IUPAC letter (or `U`) and its set of bases and the reference base's
+set intersect: N matches any base but not a gap (`-`), R (A or G) matches A
+or G, and `-`, `.`, `*` or any other character matches nothing. Writers MAY
+reject files with mismatches.
 
 ### 6.8 Contig names
 
@@ -504,9 +524,9 @@ Rules:
    kind.
 2. For every base with INS1 (INS2) set there MUST be exactly one `INS` entry
    with that offset and hap 1 (2), and every `INS` entry MUST have its flag set.
-3. Inserted bases are stored in uppercase with `U` as `T`; any other letter
-   of the VCF allele (an IUPAC ambiguity code, say) is stored as `N`, and the
-   writer counts such letters (`nonacgt_inserted_bases`).
+3. Inserted bases are stored in uppercase with `U` as `T`; characters of the
+   VCF allele other than A, C, G, T, U and N (an IUPAC ambiguity code, say)
+   are stored as `N`, and the writer counts them (`nonacgt_inserted_bases`).
 4. Every run of COMPLEX bases on a haplotype MUST start with a `COMPLEX`
    entry for its first offset and that haplotype, and there MUST NOT be two
    `COMPLEX` entries for one offset and haplotype. Entries on bases that are
@@ -649,7 +669,7 @@ Extension planes MUST be described here.
 | `encoding` | no | conversion counts (9.4) |
 | `callable_bases` | no | number of bases inside callable regions |
 | `sidecar_entries` | no | number of sidecar entries |
-| `phase_sets` | no | number of distinct phase sets on the contig |
+| `phase_sets` | no | number of distinct non-zero values in the `ps` plane |
 | `phase_set_ids` | yes if `ps` holds replaced identifiers | map from `ps` values (as decimal strings) to the original `FORMAT/PS` identifiers they replace (5.5) |
 | `invalid_characters_converted_to_N` | yes if any | number of FASTA characters stored as N (5.1) |
 
@@ -661,7 +681,9 @@ converted to N, it does not.
 
 ### 9.4 Sample and conversion record
 
-`sample` is `null` for a reference-only file, otherwise an object with
+`sample` is `null` for a file without `gt` planes, including one made from a
+VCF none of whose calls fell on a contig of the reference; otherwise it is an
+object with
 `id` (REQUIRED, the VCF sample name) and, as applicable, `source` (input
 file name), `callable_regions` (the name of the callable-regions file
 applied in section 6.1, or `null`), `haploid_regions` (a description of the
