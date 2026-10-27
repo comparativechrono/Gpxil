@@ -26,7 +26,7 @@ an image *format* needs more care than an image:
 | Observation in the notebooks | Consequence | In gpxil |
 |---|---|---|
 | Pictures were made with `plt.imshow` and `savefig`. The figure has margins and is resampled to `figsize × dpi`, so pixels are not bases. In the chrY settings (5,000 bases per row, 600 dpi) the picture had 0.93 pixels per base and only 72 % of bases could be read back even by nearest colour; at 500 bases per row and 150 dpi it had 2.3 pixels per base, and the exact colour survived at only 6 % of bases because of anti-aliasing. | lossy | arrays are written directly, one pixel per base, never through a plotting library |
-| Bases were collected with `[color_map[b] for b in seq if b in color_map]`, which silently drops every character that is not uppercase `ACGT`. | every N and every lowercase base shifts all later positions; in a soft-masked FASTA that is about half of the genome (49 % of chr21) | the mapping covers all IUPAC letters in both cases; offset `i` is always base `i + 1` |
+| Bases were collected with `[color_map[b] for b in seq if b in color_map]`, which silently drops every character that is not uppercase `ACGT`. | every N and every lowercase base shifts all later positions; in a soft-masked FASTA that is most of the sequence (28.1 of chr21's 46.7 million bases, 60 %) | the mapping covers all IUPAC letters in both cases; offset `i` is always base `i + 1` |
 | Colours were stored as float RGB arrays. | 24 bytes per base in memory (6 GB for chr1) | 1 byte per base per plane |
 | The Pillow and Cairo versions set one pixel per Python call. | minutes per chromosome | a 256-entry lookup table encodes chr21 in 0.6 s |
 | `apply_variants` applied the first ALT of every record whatever the genotype, compared only one REF base, and rebuilt the sequence string for each variant. | heterozygous sites became homozygous, indels were silently skipped, and run time grew with variants × length | per-haplotype states with zygosity, phase and indels (section 6 of the spec) |
@@ -51,11 +51,10 @@ the idea survives in gpxil, but as a palette (below), not as storage. Stored
 as a 4-channel dosage image (0, 1 or 2 copies of each base per pixel) chr21
 takes **15.4 MB** against **0.68 MB** for the gpxil `gt` and `flags` planes,
 because a dosage image repeats the reference at every base instead of
-recording differences from it. It also cannot represent phase (216,000
-phased positions on chr21 where only one haplotype differs from the
-reference would lose their haplotype order),
-insertions (7,793 positions), or the difference between a deleted and an
-unknown base (341,000 positions). And CMYK pixel values do not survive a
+recording differences from it. It also cannot represent phase (at the
+230,576 phased positions of chr21 where the two haplotypes differ, it could
+not say which haplotype carries what), insertions (7,793 positions), or the
+difference between a deleted and an unknown base (341,209 positions). And CMYK pixel values do not survive a
 colour-managed workflow: CMYK has four dimensions and RGB three, many CMYK
 values print the same colour, and ICC conversions apply gamut mapping and
 black generation, which is exactly what broke the round-trip notebook.
@@ -123,10 +122,10 @@ and a side table; readable from every language.
 **Strips of whole rows, not tiles.** In the raster layout a genomic interval
 is a run of consecutive rows, which is exactly a strip. Tiles split each row
 across many tiles, so a random 1 kb read took 22 times longer (12.9 ms
-against 0.58 ms). Strip size trades random-access cost against compression: 64 KiB
-strips read a random kilobase in 0.17 ms for 2.6 % more space; 1 MiB strips
-save 0.6 % (Deflate) to 3 % (Zstandard) but need 1.8 ms. gpxiltools uses
-256 KiB.
+against 0.58 ms). Strip size trades random-access cost against
+compression: 64 KiB strips read a random kilobase in 0.17 ms for 2.5 % more
+space; 1 MiB strips save 0.6 % (Deflate) to 3 % (Zstandard) but need
+1.8 ms. gpxiltools uses 256 KiB.
 
 **Deflate by default.** Zstandard 19 is 6 % smaller and LZMA 11 % smaller,
 but Deflate (like the older LZW) is read by practically every TIFF reader,
@@ -188,11 +187,14 @@ bcftools skips the later record, while gpxil applies both, following the
 `*` alleles: in a VNTR at chr21:16,747,387 HG002 carries an 81 bp deletion on
 haplotype 1 (first record) and an 83 bp deletion on haplotype 2 (second
 record), and bcftools drops the second. Exporting the chr21 file back to VCF
-(107,225 records) and re-encoding it reproduces both haplotype sequences
-exactly; 3,879 of 46.7 million `gt` values differ only because a merged
-record's indel was re-aligned to an equivalent position. The test suite also
-checks simulated genomes with known haplotypes, phased and unphased, and an
-exact match with bcftools on them.
+(107,225 records) and re-encoding it reproduces both haplotype sequences,
+apart from the case of 24 letters. The planes differ in 3,879 of 46.7
+million `gt` values, 51 insertion flags and one FILTERED flag, all where an
+indel inside a merged record was placed at a different but equivalent
+position; since a letter's case follows the reference base it is aligned
+to, those placements also explain the 24 letters. The test
+suite also checks simulated genomes with known haplotypes, phased and
+unphased, and an exact match with bcftools on them.
 
 ## 6. Whole genome
 
@@ -202,13 +204,14 @@ callable regions and X and Y treated as haploid outside the PARs:
 | | |
 |---|---|
 | sequences | 194 (25 chromosomes and 169 scaffolds) |
+| with genotype planes | 24 (chromosomes 1-22, X, Y); the mitochondrion and the scaffolds have no calls and are stored as reference only |
 | bases | 3,099,750,718 |
 | calls | 5,945,525 (0 conflicts, 0 REF mismatches) |
-| file size | **888.8 MB** |
+| file size | **888.1 MB** |
 | `ref` plane | 848.0 MB (Ensembl's FASTA.gz: 942.5 MB) |
-| `gt` + `flags` + sidecar | 39.2 MB |
-| encoding time | 12.5 min (2 cores) |
-| full validation | 1 min 55 s |
+| `gt` + `flags` + sidecar | 39.3 MB |
+| encoding time | 12.6 min on 2 cores, at most 2 GB of memory |
+| full validation | 1.5 min, 0.23 GB of memory |
 
 ![Mean colour of each chromosome slice for HG002](img/karyotype.png)
 

@@ -18,7 +18,7 @@ be read without decoding the rest.
 - **Aligned.** Every plane, and every person's file, uses the reference's
   coordinates: the same pixel is the same genomic position.
 - **Compact.** HG002's whole genome on GRCh38 (3.1 billion bases, 5.9 million
-  calls) is an 889 MB file: 848 MB of reference, smaller than the FASTA.gz it
+  calls) is an 888 MB file: 848 MB of reference, smaller than the FASTA.gz it
   came from, and 39 MB of genotype.
 
 ![HG002 on GRCh38, every chromosome](docs/img/karyotype.png)
