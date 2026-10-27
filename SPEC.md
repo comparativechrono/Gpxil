@@ -2,6 +2,10 @@
 
 **Version 0.1 (draft), October 2026**
 
+Copyright © 2026 Chronomic Medicine Group, Department of Genomic Medicine,
+University of Cambridge. Released under the MIT licence (see `LICENSE`). Also
+available as a PDF, `gpxil-spec.pdf`.
+
 gpxil stores a genome as pictures: one pixel per base, one image per
 chromosome and per kind of information, in an ordinary multi-page TIFF file.
 A gpxil file opens in any TIFF viewer as a picture of the genome, can be

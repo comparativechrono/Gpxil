@@ -27,7 +27,7 @@ be read without decoding the rest.
 
 | | |
 |---|---|
-| [SPEC.md](SPEC.md) | the format specification, version 0.1 (draft) |
+| [SPEC.md](SPEC.md) | the format specification, version 0.1 (draft); also as a PDF, [gpxil-spec.pdf](gpxil-spec.pdf) |
 | [docs/rationale.md](docs/rationale.md) | why the format looks this way, with measurements |
 | [schema/gpxil-0.1.schema.json](schema/gpxil-0.1.schema.json) | JSON Schema for the file metadata |
 | [examples/](examples) | the worked example of the specification as a file, with its expected contents |
@@ -46,6 +46,14 @@ gpxil render sample.gpxil.tif chr21:30,000,001-30,250,000 -o region.png --width 
 gpxil book sample.gpxil.tif -o sample-genome.pdf
 ```
 
+## See it
+
+The [Gpxil browser](https://comparativechrono.github.io/Gpxil-browser/) shows
+the GRCh38 reference as gpxil, from the karyotype down to single bases, and
+offers the files for download. Single genes, transcripts and proteins come as
+[pxil](https://github.com/comparativechrono/pxil) files, a lighter format for
+one sequence at a time.
+
 ## Background
 
 The genome pixel image (GPxI) was introduced by Guenter Albrecht-Buehler, who
@@ -63,3 +71,9 @@ welcome.
 
 A gpxil file of a person, and every faithful picture or print of it, is that
 person's genome. See section 13 of the specification.
+
+## Licence
+
+Copyright © 2026 Chronomic Medicine Group, Department of Genomic Medicine,
+University of Cambridge. The specification, schema, examples and tools in this
+repository are released under the [MIT licence](LICENSE).
