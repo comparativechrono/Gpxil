@@ -245,6 +245,56 @@ callable regions and X and Y treated as haploid outside the PARs:
 
 ![Mean colour of each chromosome slice for HG002](img/karyotype.png)
 
+**Windows (version 0.3).** Much of what people do with a genome is about one
+gene, and a whole chromosome is a large thing to pass around for it: HG002's
+chromosome 17 is a file of 24.6 MB. Cut out as an ordinary contig, a gene
+loses its place: its first base becomes position 1 of nothing, and nothing
+tells a reader that it isn't a whole chromosome. A window is a contig that
+says what it is a stretch of, and where (specification section 3.1). TP53
+with 100 kb either side (225,768 bases) out of HG002's chromosome 17 is a
+file of 76 kB with its reference plane and 12 kB without it; the gene alone
+(25,768 bases) is 17 kB. `gpxil subset` cuts it in 0.3 s from a local file,
+and from a web server reads 2.6 MB of the 24.6 MB in 10 range requests.
+
+A window holds what the whole chromosome's planes hold over its stretch, so
+a window converted from the VCF must agree with one cut out of a whole
+chromosome. The base of a window depends on the calls that cover it and,
+through the placement of unphased calls (section 6.5), on those that overlap
+them, and so on; so `gpxil encode --region` converts just the calls that
+join up with the window through overlapping spans, over the stretch they
+cover (277 records for TP53's window, in 11.5 s from the whole-genome VCF,
+most of it spent decompressing). On 41 windows of HG002's chromosome 17,
+from one base to 6 Mb and with edges chosen to cut deletions, insertions
+and the records that rule moves, and on dense simulated calls of every kind
+(overlapping indels, symbolic deletions and inversions, breakends, reference
+blocks, `*` alleles, haploid and missing genotypes), the two give the same
+planes and sidecars, base for base. Phase-set values that stand for
+identifiers other than numbers were at first numbered from the calls
+converted, so a window could number them its own way; but then two windows
+of one file numbered one phase set two ways, and a VCF made from them split
+it, or joined it to another. So version 0.3 numbers them from all the
+chromosome's phased calls, whichever are converted (section 5.5), and a
+window's values are its parent's. An independent review found that, and that
+records of overlapping windows written one window after the other lost the
+end of a deletion that one window cut and the next held whole: windows of
+one chromosome that overlap or touch are now read as one stretch of it,
+for VCF, comparisons and counts. On 116 windows of HG002's chromosome 17
+that form 41 such stretches, the records are those of one window per
+stretch, all 860 of them.
+
+Other forms were weighed. A window laid out on its parent's raster, its
+first base at the column it has in the whole chromosome, would keep pixels
+in place between the two pictures, but would waste up to a row and break the
+rule that only the end of a page is padding; views can re-wrap a plane
+instead (section 4). An offset for the whole file would not do for files
+that hold several windows, or a chromosome and a window of it. And positions
+read from the window's name would make a name data; the name is only
+recommended to be the region, for people and for tools that know nothing of
+windows, and the `window` key says where the window is. A window cut out of
+a file of an older version has version 0.3, since a reader of 0.2 must
+ignore the `window` key, and its `subset` record names the version whose
+rules made its planes.
+
 ## 7. Pictures, analysis and print
 
 Rendering maps codes to colours through a palette, so it never alters the
