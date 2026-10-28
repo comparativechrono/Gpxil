@@ -46,6 +46,12 @@ gpxil render sample.gpxil.tif chr21:30,000,001-30,250,000 -o region.png --width 
 gpxil book sample.gpxil.tif -o sample-genome.pdf
 ```
 
+For web pages, gpxiltools has a reader in JavaScript,
+[`js/gpxil-read.js`](https://github.com/comparativechrono/Gpxil-tools/tree/main/js),
+which reads any interval of any plane over HTTP range requests; the Gpxil
+browser and [GpxilStudio](https://github.com/comparativechrono/gpxilstudio)
+use it.
+
 ## See it
 
 The [Gpxil browser](https://comparativechrono.github.io/Gpxil-browser/) shows
