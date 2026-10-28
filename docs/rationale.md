@@ -138,8 +138,8 @@ built. Writers can choose; readers should support all three.
 per base plus a separate 1-bit soft-mask plane would save 7 % with Deflate
 and 12 % with Zstandard (10.4 and 9.3 MB). But common TIFF writers cannot
 compress 4-bit palette images, 4-bit pixels are awkward in image-analysis
-code, and soft-masking would need its own plane. Version 0.1 stays at 8 bits;
-a packed profile could be added later without changing the data model.
+code, and soft-masking would need its own plane. gpxil stays at 8 bits; a
+packed profile could be added later without changing the data model.
 
 **Raster, not Hilbert.** A Hilbert curve keeps neighbouring bases together in
 two dimensions, which suits image filters, but stored that way chr21 grew by
@@ -195,6 +195,20 @@ position; since a letter's case follows the reference base it is aligned
 to, those placements also explain the 24 letters. The test
 suite also checks simulated genomes with known haplotypes, phased and
 unphased, and an exact match with bcftools on them.
+
+**Overlapping calls (version 0.2).** Version 0.1 applied unphased genotypes
+as written, so two heterozygous calls that overlap both went to haplotype 2,
+where they ran together. Comparing HG002's GIAB benchmarks v4.2.1 and v5.0q
+base by base on chromosome 17 (`gpxil compare`), 84 of the 85 stretches where
+they differed agreed with a check made record by record from the VCFs; the
+85th was two deletions of v4.2.1 joined into one. HG002 against his parents
+had one Mendelian error for the same reason. Version 0.2 puts each allele on
+a haplotype it fits (specification section 6.5). On chromosome 17 of the
+v4.2.1 benchmarks of HG002, HG003 and HG004 it moves 26 of 320,884 records
+to the other haplotype: 6 deletions whose first base another deletion
+removes, and 20 insertions after such a base. Every differing stretch and
+every Mendelian error then agrees with the record check, and the artefactual
+error is gone ([Gpxil-scratchpad, experiment 03](https://github.com/comparativechrono/gpxil-scratchpad/tree/main/experiments/03-compare)).
 
 ## 6. Whole genome
 

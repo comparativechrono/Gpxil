@@ -27,9 +27,9 @@ be read without decoding the rest.
 
 | | |
 |---|---|
-| [SPEC.md](SPEC.md) | the format specification, version 0.1 (draft); also as a PDF, [gpxil-spec.pdf](gpxil-spec.pdf) |
+| [SPEC.md](SPEC.md) | the format specification, version 0.2 (draft); also as a PDF, [gpxil-spec.pdf](gpxil-spec.pdf) |
 | [docs/rationale.md](docs/rationale.md) | why the format looks this way, with measurements |
-| [schema/gpxil-0.1.schema.json](schema/gpxil-0.1.schema.json) | JSON Schema for the file metadata |
+| [schema/gpxil-0.2.schema.json](schema/gpxil-0.2.schema.json) | JSON Schema for the file metadata ([0.1](schema/gpxil-0.1.schema.json) for files of version 0.1) |
 | [examples/](examples) | the worked example of the specification as a file, with its expected contents |
 
 ## Tools
@@ -40,7 +40,7 @@ sequences and VCF, validates files, renders PNG and CMYK TIFF pictures and
 writes a print-ready "genome book" PDF with one dot per base.
 
 ```sh
-pip install git+https://github.com/comparativechrono/Gpxil-tools
+pip install gpxiltools
 gpxil encode GRCh38.fa.gz -v sample.vcf.gz -o sample.gpxil.tif
 gpxil render sample.gpxil.tif chr21:30,000,001-30,250,000 -o region.png --width 500
 gpxil book sample.gpxil.tif -o sample-genome.pdf

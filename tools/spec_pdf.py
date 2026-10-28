@@ -1,6 +1,6 @@
 """Render a Markdown specification as a PDF: pandoc makes the HTML, Chromium prints it.
 
-    python tools/spec_pdf.py SPEC.md gpxil-spec.pdf --title "gpxil 0.1: Genome Pixel Image format"
+    python tools/spec_pdf.py SPEC.md gpxil-spec.pdf --title "gpxil 0.2: Genome Pixel Image format"
 
 Needs pandoc and Playwright with Chromium
 (pip install playwright; python -m playwright install chromium).

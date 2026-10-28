@@ -1,6 +1,6 @@
 # gpxil: Genome Pixel Image format
 
-**Version 0.1 (draft), October 2026**
+**Version 0.2 (draft), October 2026**
 
 Copyright © 2026 Chronomic Medicine Group, Department of Genomic Medicine,
 University of Cambridge. Released under the MIT licence (see `LICENSE`). Also
@@ -156,8 +156,8 @@ any other width without loss. gpxiltools uses `W = 8192` by default.
 Other arrangements, such as page-sized rows for printing (section 12.4), a
 width equal to a repeat period to make tandem repeats stand out as vertical
 stripes, or a Hilbert curve that keeps neighbouring bases neighbouring in two
-dimensions (section 11.5), are *views* computed from the raster. Version
-0.1 stores only the raster layout.
+dimensions (section 11.5), are *views* computed from the raster. This
+version stores only the raster layout.
 
 ## 5. Planes
 
@@ -222,10 +222,10 @@ Rules:
 2. For phased calls (section 5.3, PHASED) haplotype 1 and haplotype 2 are
    the first and second alleles of the phased genotype. For unphased calls,
    haplotype 1 holds the first allele written in the genotype and haplotype
-   2 the second (but see section 6.5 for `*` alleles); the order then
-   carries no biological meaning.
+   2 the second (but see section 6.5 for `*` alleles and for calls that
+   overlap others); the order then carries no biological meaning.
 3. A haploid call sets haplotype 2 to ABSENT. Polyploid calls cannot be
-   represented in version 0.1.
+   represented (section 14).
 4. Insertions are not states: they happen *between* bases and are flagged in
    the `flags` plane (INS1, INS2) on the base after which they occur, with the
    inserted sequence in the sidecar.
@@ -415,7 +415,8 @@ a call writes a state to a base:
 So a record whose REF allele overlaps another record's variant never
 undoes that variant, whatever the record order, and overlapping records
 that use `*` combine correctly. Split multi-allelic records (two records at
-one position, each `0/1`) cannot be resolved and show up as conflicts.
+one position, each `0/1`) go one to each haplotype when they are unphased
+(section 6.5); phased, they cannot be resolved and show up as conflicts.
 
 Insertions are added at their anchor base on their haplotype; two different
 insertions at the same base on the same haplotype are a conflict (last
@@ -450,6 +451,36 @@ statement; writers SHOULD count such bases (`ploidy_mismatches`).
   already has an asserted DEL within the span, and it is not the one the
   written order gives `*`, the two alleles are swapped (counted as
   `spanning_deletions_reassigned`). Phased genotypes are applied as written.
+- In an unphased diploid genotype whose two alleles differ and neither is
+  `*`, the order of the alleles carries no meaning either, but two
+  heterozygous calls that overlap cannot both be on one haplotype: written
+  `0/1`, both would go to haplotype 2 and run together. So each allele goes
+  to a haplotype it *fits*. An allele fits a haplotype unless, at some base
+  of the span, it would write REF or a strong state where that haplotype is
+  already asserted with a different strong state (section 6.4), or it would
+  insert bases after a base where that haplotype already has a different
+  insertion, or write a COMPLEX allele where it already has a different
+  one. The REF allele `0`, a missing allele `.` and an allele that writes
+  nothing (section 6.2) fit any haplotype. If an allele does not fit the
+  haplotype that the written order gives it, and the two alleles swapped
+  both fit, they are swapped (counted as `overlapping_calls_reassigned`);
+  otherwise they are applied as written, and section 6.4 decides. Each call
+  is placed against the calls applied before it, in file order, and after
+  the rule for `*` alleles above; phased genotypes are applied as written.
+  For example:
+
+  ```
+  #CHROM POS REF ALT GT
+  chr1   100 TTC T   0/1
+  chr1   102 CT  C   0/1
+  ```
+
+  The second record's ALT allele keeps its first base, offset 101, which
+  the first record deletes on haplotype 2, so it does not fit haplotype 2;
+  it goes to haplotype 1, and its REF allele to haplotype 2. Haplotype 2
+  then carries the first deletion (offsets 100-101) and haplotype 1 the
+  second (offset 102), as the records mean, not one deletion of three
+  bases.
 - Flags accumulate (bitwise OR) over all calls covering a base.
   VARIANT_SITE is set over the span of every call; FILTERED over the span of
   every call whose FILTER is neither `PASS` nor `.`.
@@ -523,9 +554,10 @@ offset	hap	kind	data
 
 Rules:
 
-1. The first line is `#gpxil-sidecar` and the version, the second the
-   column header; then one entry per line, sorted by offset, then hap, then
-   kind.
+1. The first line is `#gpxil-sidecar` and the sidecar's version, `0.1`
+   (its own: version 0.2 of gpxil did not change the sidecar), the second
+   the column header; then one entry per line, sorted by offset, then hap,
+   then kind.
 2. For every base with INS1 (INS2) set there MUST be exactly one `INS` entry
    with that offset and hap 1 (2), and every `INS` entry MUST have its flag set.
 3. Inserted bases are stored in uppercase with `U` as `T`; characters of the
@@ -614,7 +646,7 @@ The ImageDescription of every page except page 0 MUST be a JSON object with
 at least:
 
 ```json
-{"gpxil": "0.1", "contig": "chr21", "plane": "gt", "length": 46709983}
+{"gpxil": "0.2", "contig": "chr21", "plane": "gt", "length": 46709983}
 ```
 
 The ImageDescription of page 0 MUST be the file metadata (section 9), which
@@ -632,14 +664,15 @@ metadata key. The colours of the `gt` and `flags` maps are not specified.
 
 ## 9. Metadata
 
-The file metadata is a JSON object (RFC 8259). [schema/gpxil-0.1.schema.json](schema/gpxil-0.1.schema.json)
-is a JSON Schema for it. Readers MUST ignore keys they do not know.
+The file metadata is a JSON object (RFC 8259). [schema/gpxil-0.2.schema.json](schema/gpxil-0.2.schema.json)
+is a JSON Schema for it ([schema/gpxil-0.1.schema.json](schema/gpxil-0.1.schema.json)
+for files of version 0.1). Readers MUST ignore keys they do not know.
 
 ### 9.1 Top level
 
 | Key | Required | Content |
 |---|---|---|
-| `gpxil` | yes | format version, `"0.1"` |
+| `gpxil` | yes | format version, `"0.2"`: the version whose rules the file follows, including section 6's for its genotypes (a file that copies planes from another, without converting calls, keeps that file's version) |
 | `layout` | yes | `{"type": "raster", "width": W}`; `width` is the default for contigs |
 | `contigs` | yes | list of contig entries (9.3), in page order |
 | `planes` | yes if extension planes are present | plane descriptions (9.2) |
@@ -699,8 +732,8 @@ Each contig's `encoding` object SHOULD report the counts named in section 6:
 `skipped_out_of_range` and `clipped_to_contig_end` (6.2),
 `bad_allele_index` (6.2), `symbolic_alleles` (6.3), `ploidy_mismatches`
 (6.4), `missing_genotypes`, `polyploid_skipped`,
-`spanning_deletion_alleles` and `spanning_deletions_reassigned` (6.5), and
-`nonacgt_inserted_bases` (7).
+`spanning_deletion_alleles`, `spanning_deletions_reassigned` and
+`overlapping_calls_reassigned` (6.5), and `nonacgt_inserted_bases` (7).
 
 ## 10. Conformance
 
@@ -726,7 +759,9 @@ A **conforming reader**:
 3. ignores padding, unknown metadata keys, unknown extension planes, unlisted
    pages and unknown sidecar kinds;
 4. treats reserved `gt` states as UNKNOWN;
-5. does not use colour maps to interpret data.
+5. does not use colour maps to interpret data;
+6. reads files of any version 0.x, and rejects files of another major
+   version (section 14).
 
 `gpxil validate` in gpxiltools checks a file against items 1-6 of the writer
 list (item 7 needs the original VCF; the test suite of gpxiltools covers it).
@@ -873,9 +908,11 @@ reject inconsistent sizes.
 
 The version is `major.minor`. Minor versions add optional features (new
 planes, metadata keys, sidecar kinds, state codes taken from the reserved
-values) that older readers can ignore safely. A new major version is not
-readable by older readers. Readers MUST reject files with a major version
-they do not implement.
+values) that older readers can ignore safely, or refine the conversion of
+VCF calls (section 6), which changes what writers produce but not what
+readers read; a file says which version's rules made it (section 9.1). A
+new major version is not readable by older readers. Readers MUST reject
+files with a major version they do not implement.
 
 Planned or possible extensions:
 
@@ -888,7 +925,25 @@ Planned or possible extensions:
 - polyploid genotypes and richer structural-variant support;
 - preview pages for ordinary viewers.
 
-While version 0.1 is a draft it may still be clarified. Changes so far:
+While the format is a draft its versions may still be clarified. Changes so
+far:
+
+- **28 October 2026, version 0.2**: unphased calls that overlap other calls
+  are put on the haplotype they fit (section 6.5). Two heterozygous calls
+  that overlap cannot be on one haplotype, yet version 0.1 applied both as
+  written, to haplotype 2, where they ran together: two deletions became
+  one, and an insertion followed a base that another call deletes. Split
+  multi-allelic records, unphased, now go one to each haplotype. Comparing
+  HG002's two GIAB benchmarks, and HG002 with his parents, base by base
+  found the problem; on chromosome 17 of the three v4.2.1 benchmarks the
+  rule moves 26 of 320,884 records to the other haplotype, and the
+  comparisons then agree with a record-by-record check everywhere. New: the count
+  `overlapping_calls_reassigned` (9.4), the version `"0.2"` (9.1) and its
+  schema. Codes, planes, the sidecar and the container are unchanged, so
+  readers of 0.1 read files of 0.2, and files of 0.1 remain valid files of
+  version 0.1.
+
+Version 0.1:
 
 - **26 October 2026**: first draft.
 - **27 October 2026**: after a review against the reference implementation,
