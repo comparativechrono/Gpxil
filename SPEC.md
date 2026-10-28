@@ -170,7 +170,9 @@ Rules:
 3. The window's name MUST differ from the parent's name and from the
    parent's other names, so that a reader asked for the parent never takes
    the window for it; writers SHOULD give the parent's other names in the
-   `window` key (section 9.3), so that this can be checked. The name SHOULD
+   `window` key (section 9.3), so that this can be checked. A reader that
+   matches names loosely (ignoring case, or a `chr` prefix) MUST match only
+   whole contigs so: a window is found by its name as written. The name SHOULD
    be the parent's name followed by the window's first and last positions in
    the parent, 1-based, as `<parent>:<first>-<last>`
    (`chr17:7561779-7787546`): the way most tools write the region it holds.
@@ -345,14 +347,17 @@ that field.
 One unsigned 32-bit integer per base: the phase set of the phased call
 covering the base (section 6.5), or 0 if none; a base whose PHASED flag is
 clear MUST have 0. Where the VCF phase set (`FORMAT/PS`) is an integer from 1
-to 2^32−1 it MUST be stored as is; integer identifiers are compared as
-integers (`077` is 77). Other phase-set identifiers MUST be replaced by
-values that no integer identifier of the contig takes, and the writer MUST
-record the mapping in the contig's `phase_set_ids` metadata. The values MUST
-be taken downwards from 2^32−1, skipping the integer identifiers, in order
-of first appearance among the contig's phased calls in the VCF (the calls of
-two alleles, written phased, with a `PS`, that are not skipped: sections 6.2
-and 6.5), counting every identifier, including one that ends up on no base
+to 2^32−1 it MUST be stored as is. An identifier written in the digits 0-9
+is an integer and is compared as one (`077` is 77, `00` is 0); any other is
+compared as written. Other phase-set identifiers (0, an integer above
+2^32−1, or any that isn't an integer) MUST be replaced by values that no
+integer identifier of those calls takes, and the writer MUST record the
+mapping in the contig's `phase_set_ids` metadata. The calls are the
+contig's phased calls in the VCF: calls of two alleles, written phased,
+with a `PS` other than `.` or empty, that are not skipped (sections 6.2 and
+6.5). The values MUST be taken downwards from 2^32−1, skipping the integers
+that those calls' identifiers are, in order of first appearance among those
+calls, counting every identifier, including one that ends up on no base
 because other calls took all of its bases, which then has no entry in
 `phase_set_ids`. For a window (section 3.1) the calls are those of its whole
 parent, so a window's values are its parent's, and the same in every window
@@ -976,13 +981,22 @@ The records of a window (section 3.1) are its parent's over its stretch:
 `END` in COMPLEX data is already the parent's and `ps` values are kept. At
 its ends a record says only what the window holds: an event that the window
 cuts is written as far as the window holds it. A deletion at the window's
-first base has no anchor inside the window, so, as at the start of a
-contig, it takes the base after it; where a deletion covers the window to
-its end, there is no base after it either, and the record takes the base
+first base has no anchor inside the window, so the record takes the base
 before the window as its anchor, at `POS = start`, written `N` (the window
-does not hold it). A file's windows of one parent that overlap or touch,
-and the parent if the file holds it, are read as one stretch of the parent:
-their records are those of a window of all of that stretch, each once.
+does not hold it), and covers only the deleted bases the window holds. (A
+contig of a whole sequence never starts with a deleted base, since section 6
+deletes only bases after an anchor; so a window that starts inside a
+deletion has `start` > 0.)
+
+A file's windows of one parent that overlap or touch, and the parent if the
+file holds it, are read as one stretch of the parent: their records are
+those of a window of all of that stretch, each once, and a region of the
+parent that the stretch holds has the records that such a window gives for
+it. Where they have different planes, the stretch has a plane where any of them
+has it, and where none that has it holds a base, the base is unknown there
+(UNKNOWN on both haplotypes, no flags, quality, depth or phase set); writers
+of VCF leave out what windows without the sample's planes would add, as
+they leave out contigs without a `gt` plane.
 
 ### 11.5 Image analysis
 
@@ -1114,14 +1128,18 @@ far:
   calls were converted on their own or it was cut out of a whole contig;
   its name differs from its parent's, and is best the region it holds
   (`chr17:7561779-7787546`); readers give positions on it in its parent's
-  coordinates. New: the `window` key of contig entries (9.3), the `subset`
+  coordinates, and a reader that matches names loosely matches only whole
+  contigs so. New: the `window` key of contig entries (9.3), the `subset`
   key (9.1), the version `"0.3"` and its schema. Section 11.4 now calls the
   stretches that VCF records cover *event stretches*, leaving "window" to
-  windows, and says how windows' records are written. Phase-set identifiers
-  that are not integers are now numbered counting every phased call's
-  identifier, including one that ends up on no base, and MUST be (5.5), so
-  that a window's values are its parent's; and 6.2 now states that a
-  `<DEL>` allele's `SVLEN` extends a span as its `END` would. Codes,
+  windows, and says how windows' records are written: a deletion at a
+  window's first base is anchored on the base before it, written `N`, and
+  windows that overlap or touch are read as one stretch. Phase-set
+  identifiers that are not integers are now numbered counting every phased
+  call's identifier, including one that ends up on no base, and MUST be
+  (5.5), so that a window's values are its parent's; an integer identifier
+  is one written in the digits 0-9. And 6.2 now states that a `<DEL>`
+  allele's `SVLEN` extends a span as its `END` would. Codes,
   planes, the sidecar and the container are unchanged, so readers of 0.2
   read files of 0.3 (a window as an ordinary contig), and files of 0.1 and
   0.2 remain valid.
@@ -1304,11 +1322,12 @@ its own, the window takes the record at POS 4, which deletes two of its
 bases from an anchor outside it, and those at 8 and 9; not the one at 2,
 which overlaps none of them. Haplotype 1 over the window is `GTGGnc` and
 haplotype 2 `ACGTGGgc`. Back to VCF (section 11.4), the deletion has no
-anchor in the window, so it takes the base after it:
+anchor in the window, so it takes the base before the window, which the
+window doesn't hold, as `N`:
 
 ```
 #CHROM POS REF ALT FILTER         GT
-chrT   5   ACG G   PASS           1|0
+chrT   4   NAC N   PASS           1|0
 chrT   8   T   TGG PASS           1|1
 chrT   9   A   G   gpxil_filtered ./1
 ```
