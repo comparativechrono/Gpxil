@@ -20,6 +20,9 @@ be read without decoding the rest.
 - **Compact.** HG002's whole genome on GRCh38 (3.1 billion bases, 5.9 million
   calls) is an 888 MB file: 848 MB of reference, smaller than the FASTA.gz it
   came from, and 39 MB of genotype.
+- **Windows.** A gene and its surroundings can travel alone, in a file of a
+  few kilobytes that keeps the chromosome's positions: TP53 and 100 kb either
+  side, out of HG002's genome, is 76 kB.
 
 ![HG002 on GRCh38, every chromosome](docs/img/karyotype.png)
 
@@ -27,9 +30,9 @@ be read without decoding the rest.
 
 | | |
 |---|---|
-| [SPEC.md](SPEC.md) | the format specification, version 0.2 (draft); also as a PDF, [gpxil-spec.pdf](gpxil-spec.pdf) |
+| [SPEC.md](SPEC.md) | the format specification, version 0.3 (draft); also as a PDF, [gpxil-spec.pdf](gpxil-spec.pdf) |
 | [docs/rationale.md](docs/rationale.md) | why the format looks this way, with measurements |
-| [schema/gpxil-0.2.schema.json](schema/gpxil-0.2.schema.json) | JSON Schema for the file metadata ([0.1](schema/gpxil-0.1.schema.json) for files of version 0.1) |
+| [schema/gpxil-0.3.schema.json](schema/gpxil-0.3.schema.json) | JSON Schema for the file metadata ([0.2](schema/gpxil-0.2.schema.json) and [0.1](schema/gpxil-0.1.schema.json) for files of those versions) |
 | [examples/](examples) | the worked example of the specification as a file, with its expected contents |
 
 ## Tools
@@ -43,6 +46,7 @@ writes a print-ready "genome book" PDF with one dot per base.
 pip install gpxiltools
 gpxil encode GRCh38.fa.gz -v sample.vcf.gz -o sample.gpxil.tif
 gpxil render sample.gpxil.tif chr21:30,000,001-30,250,000 -o region.png --width 500
+gpxil subset sample.gpxil.tif chr17:7,561,779-7,787,546 -o TP53.gpxil.tif   # a window
 gpxil book sample.gpxil.tif -o sample-genome.pdf
 ```
 
@@ -71,9 +75,9 @@ individual people's genomes; the `gpxi` palette reproduces his grey levels.
 
 ## Status
 
-Draft. Version 0.1 covers one sample per file on a linear reference. Planned:
-cohorts, overview pyramids, base-modification planes. Comments and issues are
-welcome.
+Draft. Version 0.3 covers one sample per file on a linear reference, over
+whole chromosomes or windows of them. Planned: cohorts, overview pyramids,
+base-modification planes. Comments and issues are welcome.
 
 A gpxil file of a person, and every faithful picture or print of it, is that
 person's genome. See section 13 of the specification.

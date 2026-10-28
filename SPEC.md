@@ -1,6 +1,6 @@
 # gpxil: Genome Pixel Image format
 
-**Version 0.2 (draft), October 2026**
+**Version 0.3 (draft), October 2026**
 
 Copyright © 2026 Chronomic Medicine Group, Department of Genomic Medicine,
 University of Cambridge. Released under the MIT licence (see `LICENSE`). Also
@@ -92,10 +92,12 @@ picture and makes it a file format:
   haplotypes of the sample (substitutions, insertions, deletions, phase,
   haploid regions, no-calls) can be reconstructed exactly.
 
-A gpxil file holds the reference and at most one sample. It is not a
-replacement for VCF, CRAM or gVCF in analysis pipelines; it keeps the
-haplotype content of a call set, not its record syntax or annotations
-(section 6.9).
+A gpxil file holds the reference and at most one sample, over whole
+chromosomes or over windows of them: a gene and its surroundings, say, in a
+file of a few kilobytes that keeps the chromosome's positions (section 3.1).
+It is not a replacement for VCF, CRAM or gVCF in analysis pipelines; it
+keeps the haplotype content of a call set, not its record syntax or
+annotations (section 6.9).
 
 ## 3. Data model
 
@@ -107,7 +109,9 @@ A gpxil file consists of **metadata** (section 9) and an ordered list of
 - a **layout width** `W` ≥ 1 (section 4);
 - one or more **planes**, each a sequence of exactly `L` values of a fixed
   data type, one value per offset `0 .. L-1`;
-- an optional **sidecar** (section 7).
+- an optional **sidecar** (section 7);
+- if it holds a stretch of a longer sequence rather than all of it, the
+  **window** it is: which sequence, and where in it (section 3.1).
 
 The standard planes are:
 
@@ -125,13 +129,80 @@ Rules:
 
 1. A contig SHOULD have a `ref` plane. A contig without one MUST carry the
    `md5` and/or `refget` digest of its reference sequence in its metadata
-   entry (section 9.3), so that readers can obtain the sequence elsewhere.
+   entry (section 9.3), or, for a window, those of its parent (section
+   3.1), so that readers can obtain the sequence elsewhere.
 2. If a contig has a `gt` plane it MUST also have a `flags` plane.
 3. `gq`, `dp` and `ps` planes MAY be present only when a `gt` plane is.
 4. All contigs of a file that carry a `gt` plane describe the same sample,
    the one in the `sample` metadata (section 9.4).
 5. A plane name used on several contigs MUST have the same data type on all
    of them.
+
+### 3.1 Windows
+
+A **window** is a contig that holds a stretch of a longer sequence, its
+**parent**, rather than all of it: a gene and its surroundings, say, out of a
+person's whole genome. Its metadata entry has a `window` key (section 9.3)
+that names the parent and gives the window's **start**, the offset in the
+parent of the window's offset 0. Offset `i` of the window is offset
+`start + i` of the parent, for `0 ≤ i < L`.
+
+Rules:
+
+1. A window holds what a contig of its whole parent, made from the same
+   inputs by the same rules, would hold at offsets `start .. start + L − 1`:
+   in every plane the parent's values at those offsets, and in the sidecar
+   the parent's entries at those offsets (section 7), each at its offset
+   less `start`. So calls are converted as for the whole parent (section
+   6): a call that crosses an end of the window writes the bases inside it
+   as it would in the whole parent, and a window has a `gt` plane if and
+   only if its whole parent would (section 6.1), even when no call falls in
+   it. The one exception is the values that replace phase-set identifiers
+   (section 5.5): a window converted on its own MAY number them
+   differently, and its `phase_set_ids` gives them.
+2. `start + L` MUST NOT exceed the parent's length. The parent is a
+   sequence, never another window: a window cut from a window names that
+   window's parent, and its own start in it.
+3. The window's name MUST differ from the parent's name and from the
+   parent's other names, so that a reader asked for the parent never takes
+   the window for it. It SHOULD be the parent's name followed by the
+   window's first and last positions in the parent, 1-based, as
+   `<parent>:<first>-<last>` (`chr17:7561779-7787546`): the way most tools
+   write the region it holds.
+4. The window's `md5` and `refget` (section 9.3) are digests of its own
+   sequence. The parent's digests and length SHOULD also be given, in the
+   `window` key, so that the parent can be found and checked; a window
+   without a `ref` plane needs its own digests or its parent's (section 3,
+   rule 1), and the parent's identify it as well, with its start and
+   length (a refget server, for one, serves a stretch of a sequence).
+5. A window without a `ref` plane takes its bases from its parent: a reader
+   given the reference finds the parent (by name, other names or digests),
+   checks it against what the `window` key and the window's own digests
+   say, and reads offsets `start .. start + L − 1` of it.
+6. A file MAY hold several windows of one parent, which MAY overlap, and
+   MAY also hold the parent itself.
+7. Readers SHOULD give positions on a window in its parent's coordinates
+   (offset `i` is position `start + i + 1`) and SHOULD accept regions in
+   them, reading a region of the parent from a window that holds all of it.
+
+In everything else a window is a contig like any other, with its own layout
+(section 4: its first base is row 0, column 0) and its own metadata entry.
+A sidecar entry belongs to its base, so an insertion after the base before
+the window is not in the window, nor is a COMPLEX allele that starts before
+it, though the allele's `END` may reach into it. If the window's first base
+is COMPLEX on a haplotype and the parent has no entry there (a run of
+COMPLEX bases that started before the window), the window holds a copy of
+the entry that starts the run, at offset 0, so that every run starts with
+an entry (section 7).
+
+A writer need not convert every call of the parent to make a window
+(informative). A base depends only on the calls whose spans cover it, and,
+through section 6.5, on the calls that overlap those, and so on: so the
+calls that overlap the window, and those that overlap them, and so on,
+converted alone, from the initial states of section 6.1, over the stretch
+their spans cover, give the window's values. gpxiltools makes windows both ways, by converting calls
+(`gpxil encode --region`) and by cutting them out of a file
+(`gpxil subset`), and checks that the two agree.
 
 ## 4. Layout
 
@@ -289,7 +360,9 @@ This section fixes how one sample's calls in a VCF (version 4.2 or later)
 become `gt`, `flags`, `gq`, `dp`, `ps` and sidecar data, so that different
 writers produce the same planes from the same input. Calls are matched to
 contigs by name (section 6.8); calls on contigs the reference does not have
-are skipped, and writers SHOULD list those contigs in the metadata.
+are skipped, and writers SHOULD list those contigs in the metadata. For a
+window (section 3.1) the contig here is its whole parent, and the window
+holds the result over its stretch.
 
 ### 6.1 Initial state
 
@@ -571,15 +644,15 @@ offset	hap	kind	data
 
 | Column | Content |
 |---|---|
-| `offset` | 0-based offset of the base the entry belongs to |
+| `offset` | 0-based offset of the base the entry belongs to, on the contig (on a window, the window's offset: section 3.1) |
 | `hap` | 1 or 2 |
 | `kind` | `INS` or `COMPLEX` |
-| `data` | for `INS`: the inserted bases, one or more of uppercase `A C G T N`; for `COMPLEX`: `;`-separated `KEY=value` items, at least `REF` and `ALT`, and `END` (VCF coordinates) when known |
+| `data` | for `INS`: the inserted bases, one or more of uppercase `A C G T N`; for `COMPLEX`: `;`-separated `KEY=value` items, at least `REF` and `ALT`, and `END` (VCF coordinates, so on a window the parent's) when known |
 
 Rules:
 
 1. The first line is `#gpxil-sidecar` and the sidecar's version, `0.1`
-   (its own: version 0.2 of gpxil did not change the sidecar), the second
+   (its own: versions 0.2 and 0.3 of gpxil did not change it), the second
    the column header; then one entry per line, sorted by offset, then hap,
    then kind.
 2. For every base with INS1 (INS2) set there MUST be exactly one `INS` entry
@@ -670,7 +743,7 @@ The ImageDescription of every page except page 0 MUST be a JSON object with
 at least:
 
 ```json
-{"gpxil": "0.2", "contig": "chr21", "plane": "gt", "length": 46709983}
+{"gpxil": "0.3", "contig": "chr21", "plane": "gt", "length": 46709983}
 ```
 
 The ImageDescription of page 0 MUST be the file metadata (section 9), which
@@ -688,15 +761,16 @@ metadata key. The colours of the `gt` and `flags` maps are not specified.
 
 ## 9. Metadata
 
-The file metadata is a JSON object (RFC 8259). [schema/gpxil-0.2.schema.json](schema/gpxil-0.2.schema.json)
-is a JSON Schema for it ([schema/gpxil-0.1.schema.json](schema/gpxil-0.1.schema.json)
-for files of version 0.1). Readers MUST ignore keys they do not know.
+The file metadata is a JSON object (RFC 8259). [schema/gpxil-0.3.schema.json](schema/gpxil-0.3.schema.json)
+is a JSON Schema for it ([0.2](schema/gpxil-0.2.schema.json) and
+[0.1](schema/gpxil-0.1.schema.json) for files of those versions). Readers
+MUST ignore keys they do not know.
 
 ### 9.1 Top level
 
 | Key | Required | Content |
 |---|---|---|
-| `gpxil` | yes | format version, `"0.2"`: the version whose rules the file follows, including section 6's for its genotypes (a file that copies planes from another, without converting calls, keeps that file's version) |
+| `gpxil` | yes | format version, `"0.3"`: the version whose rules the file follows (below) |
 | `layout` | yes | `{"type": "raster", "width": W}`; `width` is the default for contigs |
 | `contigs` | yes | list of contig entries (9.3), in page order |
 | `planes` | yes if extension planes are present | plane descriptions (9.2) |
@@ -705,7 +779,18 @@ for files of version 0.1). Readers MUST ignore keys they do not know.
 | `palette` | no | name of the palette used for the `ref` colour maps |
 | `generator`, `created` | no | software and ISO 8601 creation time |
 | `summary` | no | the writer's totals for the conversion (informative) |
+| `subset` | yes, with `gpxil`, if the file has a later version than the file it copies (below); else no | for a file that copies contigs from another without converting calls again: `{"of": "<that file's name>", "gpxil": "<its version>", "contigs": [...], ...}` |
 | `contig`, `plane`, `length` | yes | page 0's own page metadata (8.4) |
+
+A file's version is the version whose rules it follows, including those of
+section 6 for its genotypes. A file that copies planes from another without
+converting calls again (a working copy of some contigs, or windows cut out
+of them) keeps that file's version, since its planes were made by that
+version's rules. But a file that holds a window (section 3.1) has version
+0.3 or later, the first with windows; if it copies a file of an older
+version, its `subset` key gives that version, whose section 6 its genotypes
+follow. A reader of version 0.2 or earlier reads a window as an ordinary
+contig, with positions counted from its first base.
 
 ### 9.2 Planes
 
@@ -733,12 +818,40 @@ Extension planes MUST be described here.
 | `phase_sets` | no | number of distinct non-zero values in the `ps` plane |
 | `phase_set_ids` | yes if `ps` holds replaced identifiers | map from `ps` values (as decimal strings) to the original `FORMAT/PS` identifiers they replace (5.5) |
 | `invalid_characters_converted_to_N` | yes if any | number of FASTA characters stored as N (5.1) |
+| `window` | yes for a window (3.1) | where in its parent the window lies (below) |
 
 Both digests are computed over the sequence as decoded from the `ref` plane
 in uppercase: one IUPAC letter per base and `-` for "no base", without line
 breaks. For a FASTA of IUPAC letters this equals the digest other tools
 compute from the FASTA; for one that used `.` or `U`, or had characters
 converted to N, it does not.
+
+A window's `window` key is an object:
+
+```json
+{
+  "of": "chr17",
+  "start": 7561778,
+  "length": 83257441,
+  "md5": "a8499ca51d6fb77332c2d242923994eb",
+  "refget": "SQ.upqChCoU-Gtd_61IidCsln-r8cxUTFeP",
+  "aliases": ["17"]
+}
+```
+
+`of` (REQUIRED) is the parent's name; `start` (REQUIRED) the offset in the
+parent of the window's offset 0, a whole number; `length` (RECOMMENDED) the
+parent's length; `md5` and `refget` (RECOMMENDED) the parent's digests; and
+`aliases` (optional) the parent's other names.
+
+In a window's entry, `md5`, `refget`, `ploidy`, `callable_bases`,
+`sidecar_entries`, `phase_sets` and `phase_set_ids` describe the window;
+`aliases` are other names of the window, never names of its parent (those
+are `window.aliases`); `vcf_contig` and `invalid_characters_converted_to_N`
+describe the parent; and `encoding` counts what converting calls for the
+window did, which can include calls next to it (section 3.1). A window cut
+from another file without converting calls again SHOULD leave out
+`encoding` and `callable_bases`, which it cannot know.
 
 ### 9.4 Sample and conversion record
 
@@ -768,13 +881,15 @@ A **conforming writer** produces files in which:
 3. every code is valid (section 5, Appendix A): `ref` bits 5-7 clear and no
    0x10; `gt` states from the table; reserved `flags` bits clear; a base state
    never equals the reference base; `ps` is 0 wherever PHASED is clear;
-4. the planes of each contig meet the rules of section 3;
+4. the planes of each contig meet the rules of section 3, and windows those
+   of section 3.1;
 5. the sidecar follows section 7: sorted, INS flags and `INS` entries one to
    one, every COMPLEX run starting with one `COMPLEX` entry;
 6. the metadata contains the required keys (section 9), including a
    `sample` object when any `gt` plane is present, and, where present,
    digests that match the `ref` plane;
-7. calls from a VCF are converted as in section 6.
+7. calls from a VCF are converted as in section 6, and a window holds what
+   its whole parent would (section 3.1).
 
 A **conforming reader**:
 
@@ -785,10 +900,14 @@ A **conforming reader**:
 4. treats reserved `gt` states as UNKNOWN;
 5. does not use colour maps to interpret data;
 6. reads files of any version 0.x, and rejects files of another major
-   version (section 14).
+   version (section 14);
+7. gives positions on a window in its parent's coordinates (section 3.1),
+   or says that they are counted from the window's first base.
 
 `gpxil validate` in gpxiltools checks a file against items 1-6 of the writer
-list (item 7 needs the original VCF; the test suite of gpxiltools covers it).
+list (item 7 needs the original VCF; the test suite of gpxiltools covers it,
+and checks that windows converted on their own and cut out of whole
+contigs agree).
 
 ## 11. Interpretation (informative)
 
@@ -818,17 +937,23 @@ distinction between deleted and unknown bases (see docs/rationale.md).
 
 ### 11.4 Back to VCF
 
-A gpxil file converts back to VCF by emitting one record per *event window*:
-each substitution is a one-base window; a run of deleted bases takes the
-anchor base before it; an insertion takes its anchor base; windows that
-share a base are merged. REF is the reference over the window and each
-haplotype contributes its sequence over the window as an allele. The
-genotype is written phased only if every called base of the window is
-PHASED. Runs of UNKNOWN outside windows can be written as gVCF-style blocks
-(`ALT=<*>`, `INFO/END`, `GT=./.`) so that re-encoding restores them.
-Re-encoding such an export gives the same haplotype sequences; individual
-`gt` values can differ where an indel inside a merged window is placed at a
-different but equivalent position.
+A gpxil file converts back to VCF by emitting one record per *event
+stretch*: each substitution is a one-base stretch; a run of deleted bases
+takes the anchor base before it; an insertion takes its anchor base;
+stretches that share a base are merged. REF is the reference over the
+stretch and each haplotype contributes its sequence over the stretch as an
+allele. The genotype is written phased only if every called base of the
+stretch is PHASED. Runs of UNKNOWN outside these stretches can be written
+as gVCF-style blocks (`ALT=<*>`, `INFO/END`, `GT=./.`) so that re-encoding
+restores them. Re-encoding such an export gives the same haplotype
+sequences; individual `gt` values can differ where an indel inside a merged
+stretch is placed at a different but equivalent position.
+
+The records of a window (section 3.1) are those of its parent: `CHROM` is
+the parent's name and offset `i` is `POS = start + i + 1`, while `END` in
+COMPLEX data is already the parent's and `ps` values are kept. A deletion
+at the window's first base has no anchor inside the window, so, as at the
+start of a contig, it takes the base after it.
 
 ### 11.5 Image analysis
 
@@ -952,6 +1077,20 @@ Planned or possible extensions:
 While the format is a draft its versions may still be clarified. Changes so
 far:
 
+- **28 October 2026, version 0.3**: windows (section 3.1). A contig can
+  hold a stretch of a longer sequence, its parent, and say where in it the
+  stretch lies, so that a gene and its surroundings travel in a file of a
+  few kilobytes and keep the chromosome's positions. A window holds what a
+  contig of its whole parent would hold over its stretch, whether its
+  calls were converted on their own or it was cut out of a whole contig;
+  its name differs from its parent's, and is best the region it holds
+  (`chr17:7561779-7787546`); readers give positions on it in its parent's
+  coordinates. New: the `window` key of contig entries (9.3), the `subset`
+  key (9.1), the version `"0.3"` and its schema. Section 11.4 now calls the
+  stretches that VCF records cover *event stretches*, leaving "window" to
+  windows. Codes, planes, the conversion of calls, the sidecar and the
+  container are unchanged, so readers of 0.2 read files of 0.3 (a window as
+  an ordinary contig), and files of 0.1 and 0.2 remain valid.
 - **28 October 2026, version 0.2**: unphased calls that overlap other calls
   are put on the haplotype they fit (section 6.5). Two heterozygous calls
   that overlap cannot be on one haplotype, yet version 0.1 applied both as
@@ -1119,3 +1258,26 @@ shows `ACGT / ACGT / ac` followed by two padding pixels.
 
 The file `examples/worked-example.gpxil.tif` in this repository contains
 exactly this example.
+
+**A window of the example** (section 3.1). The window `chrT:5-10` holds
+offsets 4 to 9 of `chrT`, positions 5 to 10. Its metadata entry has
+`"window": {"of": "chrT", "start": 4, "length": 10, ...}`, with `chrT`'s
+digests, and its planes are those of the table above from offset 4 on:
+`ref` `01 02 04 08 11 12`, `gt` `D0 D0 00 00 F4 00` and `flags`
+`11 11 00 17 18 00`, laid out from row 0, column 0 of its own pages. The
+insertion's two sidecar entries are at the window's offset 3. Converted on
+its own, the window takes the record at POS 4, which deletes two of its
+bases from an anchor outside it, and those at 8 and 9; not the one at 2,
+which overlaps none of them. Haplotype 1 over the window is `GTGGnc` and
+haplotype 2 `ACGTGGgc`. Back to VCF (section 11.4), the deletion has no
+anchor in the window, so it takes the base after it:
+
+```
+#CHROM POS REF ALT FILTER         GT
+chrT   5   ACG G   PASS           1|0
+chrT   8   T   TGG PASS           1|1
+chrT   9   A   G   gpxil_filtered ./1
+```
+
+The file `examples/worked-example-window.gpxil.tif` holds this window, and
+`examples/worked-example-window.expected.json` what a reader finds in it.
