@@ -996,7 +996,15 @@ it. Where they have different planes, the stretch has a plane where any of them
 has it, and where none that has it holds a base, the base is unknown there
 (UNKNOWN on both haplotypes, no flags, quality, depth or phase set); writers
 of VCF leave out what windows without the sample's planes would add, as
-they leave out contigs without a `gt` plane.
+they leave out contigs without a `gt` plane. The reference is read from the
+windows that have it, where they hold the bases (elsewhere it is needed
+from the reference itself). The sidecars are merged, each entry once, and
+a window's copy of section 3.1 left out: where another window holds the
+base, not as its first, its entries say whether the parent has one there;
+where windows only touch, the copy is told by the entry before it, of the
+same data, whose `END` reaches the base. (A VCF converted by section 6
+gives every COMPLEX base an entry of its own, so its windows hold no
+copies.)
 
 ### 11.5 Image analysis
 
