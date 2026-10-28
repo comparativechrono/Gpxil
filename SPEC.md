@@ -151,24 +151,29 @@ Rules:
 
 1. A window holds what a contig of its whole parent, made from the same
    inputs by the same rules, would hold at offsets `start .. start + L − 1`:
-   in every plane the parent's values at those offsets, and in the sidecar
-   the parent's entries at those offsets (section 7), each at its offset
-   less `start`. So calls are converted as for the whole parent (section
-   6): a call that crosses an end of the window writes the bases inside it
-   as it would in the whole parent, and a window has a `gt` plane if and
-   only if its whole parent would (section 6.1), even when no call falls in
-   it. The one exception is the values that replace phase-set identifiers
-   (section 5.5): a window converted on its own MAY number them
-   differently, and its `phase_set_ids` gives them.
-2. `start + L` MUST NOT exceed the parent's length. The parent is a
-   sequence, never another window: a window cut from a window names that
-   window's parent, and its own start in it.
+   in each of its planes the parent's values at those offsets, and in the
+   sidecar the parent's entries at those offsets (section 7), each at its
+   offset less `start`. So calls are converted as for the whole parent
+   (section 6): a call that crosses an end of the window writes the bases
+   inside it as it would in the whole parent, phase-set identifiers take
+   the values they take on the whole parent (section 5.5), and a window has
+   a `gt` plane when its whole parent would have one (section 6.1), even if
+   no call falls in it, and none when its parent would have none. Like any
+   contig, a window MAY leave planes out (as a copy of a reference's bases
+   only does). The one thing a window holds that its parent does not hold
+   at the same base is a copy of a COMPLEX entry at its first base (below).
+2. `start + L` MUST NOT exceed the parent's length, and a window holds less
+   than all of its parent: a contig of all of a sequence is the sequence,
+   without a `window` key. The parent is a sequence, never another window:
+   a window cut from a window names that window's parent, and its own start
+   in it.
 3. The window's name MUST differ from the parent's name and from the
    parent's other names, so that a reader asked for the parent never takes
-   the window for it. It SHOULD be the parent's name followed by the
-   window's first and last positions in the parent, 1-based, as
-   `<parent>:<first>-<last>` (`chr17:7561779-7787546`): the way most tools
-   write the region it holds.
+   the window for it; writers SHOULD give the parent's other names in the
+   `window` key (section 9.3), so that this can be checked. The name SHOULD
+   be the parent's name followed by the window's first and last positions in
+   the parent, 1-based, as `<parent>:<first>-<last>`
+   (`chr17:7561779-7787546`): the way most tools write the region it holds.
 4. The window's `md5` and `refget` (section 9.3) are digests of its own
    sequence. The parent's digests and length SHOULD also be given, in the
    `window` key, so that the parent can be found and checked; a window
@@ -191,16 +196,21 @@ A sidecar entry belongs to its base, so an insertion after the base before
 the window is not in the window, nor is a COMPLEX allele that starts before
 it, though the allele's `END` may reach into it. If the window's first base
 is COMPLEX on a haplotype and the parent has no entry there (a run of
-COMPLEX bases that started before the window), the window holds a copy of
-the entry that starts the run, at offset 0, so that every run starts with
-an entry (section 7).
+COMPLEX bases that started before the window), the window holds, at offset
+0, a copy of the parent's nearest entry before it on that haplotype (the
+entry of the allele the base belongs to), so that every run starts with an
+entry (section 7).
 
 A writer need not convert every call of the parent to make a window
-(informative). A base depends only on the calls whose spans cover it, and,
-through section 6.5, on the calls that overlap those, and so on: so the
-calls that overlap the window, and those that overlap them, and so on,
-converted alone, from the initial states of section 6.1, over the stretch
-their spans cover, give the window's values. gpxiltools makes windows both ways, by converting calls
+(informative). Calls are applied in file order (section 6.4), and a base
+depends only on the calls whose spans (section 6.2) cover it, and, through
+section 6.5, on the calls whose spans share a base with those, and so on.
+So the calls whose spans share a base with the window, and those whose
+spans share a base with them, and so on, converted alone, in file order
+and from the initial states of section 6.1, over the stretch their spans
+cover, give the window's values; whether the window has a `gt` plane, and
+the values of phase-set identifiers (section 5.5), come from the whole
+parent. gpxiltools makes windows both ways, by converting calls
 (`gpxil encode --region`) and by cutting them out of a file
 (`gpxil subset`), and checks that the two agree.
 
@@ -335,16 +345,20 @@ that field.
 One unsigned 32-bit integer per base: the phase set of the phased call
 covering the base (section 6.5), or 0 if none; a base whose PHASED flag is
 clear MUST have 0. Where the VCF phase set (`FORMAT/PS`) is an integer from 1
-to 2^32−1 it MUST be stored as is. Other phase-set identifiers MUST be
-replaced by distinct values not otherwise used on the contig, and the writer
-MUST record the mapping in the contig's `phase_set_ids` metadata. Writers
-SHOULD take these values downwards from 2^32−1, skipping values in use, in
-order of first appearance in the VCF, so that the result is reproducible;
-an identifier that ends up on no base (because other calls took all of its
-bases, section 6.5) is dropped. Integer identifiers are compared as integers
-(`077` is 77). When a contig
-has phased calls but no `ps` plane, all its phased calls belong to one phase
-set (as for phasing from a diploid assembly or a trio).
+to 2^32−1 it MUST be stored as is; integer identifiers are compared as
+integers (`077` is 77). Other phase-set identifiers MUST be replaced by
+values that no integer identifier of the contig takes, and the writer MUST
+record the mapping in the contig's `phase_set_ids` metadata. The values MUST
+be taken downwards from 2^32−1, skipping the integer identifiers, in order
+of first appearance among the contig's phased calls in the VCF (the calls of
+two alleles, written phased, with a `PS`, that are not skipped: sections 6.2
+and 6.5), counting every identifier, including one that ends up on no base
+because other calls took all of its bases, which then has no entry in
+`phase_set_ids`. For a window (section 3.1) the calls are those of its whole
+parent, so a window's values are its parent's, and the same in every window
+of the parent. When a contig has phased calls but no `ps` plane, all its
+phased calls belong to one phase set (as for phasing from a diploid assembly
+or a trio).
 
 ### 5.6 Extension planes
 
@@ -396,13 +410,17 @@ BED files are read with columns separated by tabs or spaces; `track`,
 ### 6.2 Allele decomposition
 
 A call has a REF allele of length `m` starting at offset `p = POS − 1`; it
-covers the *span* `[p, p + m)`, extended to `[p, END)` (`END` being
-`INFO/END`, a 1-based inclusive position) for records with a symbolic allele
-and for reference blocks (section 6.3). A record whose `POS` lies outside the
-contig, or whose REF allele is empty or runs past its end, MUST be skipped
-and counted (`skipped_out_of_range`); a span that `END` extends past the end
-of the contig is cut at the end and counted (`clipped_to_contig_end`). REF
-and sequence ALT alleles are read case-insensitively.
+covers the *span* `[p, p + m)`, extended to `[p, END)` for records with a
+symbolic allele and for reference blocks (section 6.3), `END` being
+`INFO/END` (a 1-based inclusive position) or, for a record with a `<DEL>`
+allele and no `INFO/END`, the largest `END` that its `<DEL>` alleles'
+`INFO/SVLEN` values give (`POS + |SVLEN|`, section 6.3); an `END` that is
+not after the span's end leaves it as it is. A record whose `POS` lies
+outside the contig, or whose REF allele is empty or runs past its end, MUST
+be skipped and counted (`skipped_out_of_range`); a span that `END` extends
+past the end of the contig is cut at the end and counted
+(`clipped_to_contig_end`). REF and sequence ALT alleles are read
+case-insensitively.
 
 Each haplotype's allele is turned into per-base states over the span as
 follows:
@@ -779,7 +797,7 @@ MUST ignore keys they do not know.
 | `palette` | no | name of the palette used for the `ref` colour maps |
 | `generator`, `created` | no | software and ISO 8601 creation time |
 | `summary` | no | the writer's totals for the conversion (informative) |
-| `subset` | yes, with `gpxil`, if the file has a later version than the file it copies (below); else no | for a file that copies contigs from another without converting calls again: `{"of": "<that file's name>", "gpxil": "<its version>", "contigs": [...], ...}` |
+| `subset` | yes, with `gpxil`, if the file has a later version than the version whose rules made its planes (below); else no | for a file that copies contigs from another without converting calls again: `{"of": "<that file's name>", "gpxil": "<the version whose section 6 its planes follow>", "contigs": [...], ...}` |
 | `contig`, `plane`, `length` | yes | page 0's own page metadata (8.4) |
 
 A file's version is the version whose rules it follows, including those of
@@ -789,7 +807,8 @@ of them) keeps that file's version, since its planes were made by that
 version's rules. But a file that holds a window (section 3.1) has version
 0.3 or later, the first with windows; if it copies a file of an older
 version, its `subset` key gives that version, whose section 6 its genotypes
-follow. A reader of version 0.2 or earlier reads a window as an ordinary
+follow, and a copy of such a copy gives the version its source's `subset`
+key gives. A reader of version 0.2 or earlier reads a window as an ordinary
 contig, with positions counted from its first base.
 
 ### 9.2 Planes
@@ -842,7 +861,8 @@ A window's `window` key is an object:
 `of` (REQUIRED) is the parent's name; `start` (REQUIRED) the offset in the
 parent of the window's offset 0, a whole number; `length` (RECOMMENDED) the
 parent's length; `md5` and `refget` (RECOMMENDED) the parent's digests; and
-`aliases` (optional) the parent's other names.
+`aliases` (RECOMMENDED when the parent has other names) the parent's other
+names, by which readers can find it.
 
 In a window's entry, `md5`, `refget`, `ploidy`, `callable_bases`,
 `sidecar_entries`, `phase_sets` and `phase_set_ids` describe the window;
@@ -907,7 +927,9 @@ A **conforming reader**:
 `gpxil validate` in gpxiltools checks a file against items 1-6 of the writer
 list (item 7 needs the original VCF; the test suite of gpxiltools covers it,
 and checks that windows converted on their own and cut out of whole
-contigs agree).
+contigs agree). Of item 7 it checks what a file shows: that a window holds
+what the file's whole parent holds over its stretch, and that windows of
+one parent agree where they overlap.
 
 ## 11. Interpretation (informative)
 
@@ -949,11 +971,18 @@ restores them. Re-encoding such an export gives the same haplotype
 sequences; individual `gt` values can differ where an indel inside a merged
 stretch is placed at a different but equivalent position.
 
-The records of a window (section 3.1) are those of its parent: `CHROM` is
-the parent's name and offset `i` is `POS = start + i + 1`, while `END` in
-COMPLEX data is already the parent's and `ps` values are kept. A deletion
-at the window's first base has no anchor inside the window, so, as at the
-start of a contig, it takes the base after it.
+The records of a window (section 3.1) are its parent's over its stretch:
+`CHROM` is the parent's name and offset `i` is `POS = start + i + 1`, while
+`END` in COMPLEX data is already the parent's and `ps` values are kept. At
+its ends a record says only what the window holds: an event that the window
+cuts is written as far as the window holds it. A deletion at the window's
+first base has no anchor inside the window, so, as at the start of a
+contig, it takes the base after it; where a deletion covers the window to
+its end, there is no base after it either, and the record takes the base
+before the window as its anchor, at `POS = start`, written `N` (the window
+does not hold it). A file's windows of one parent that overlap or touch,
+and the parent if the file holds it, are read as one stretch of the parent:
+their records are those of a window of all of that stretch, each once.
 
 ### 11.5 Image analysis
 
@@ -1088,9 +1117,14 @@ far:
   coordinates. New: the `window` key of contig entries (9.3), the `subset`
   key (9.1), the version `"0.3"` and its schema. Section 11.4 now calls the
   stretches that VCF records cover *event stretches*, leaving "window" to
-  windows. Codes, planes, the conversion of calls, the sidecar and the
-  container are unchanged, so readers of 0.2 read files of 0.3 (a window as
-  an ordinary contig), and files of 0.1 and 0.2 remain valid.
+  windows, and says how windows' records are written. Phase-set identifiers
+  that are not integers are now numbered counting every phased call's
+  identifier, including one that ends up on no base, and MUST be (5.5), so
+  that a window's values are its parent's; and 6.2 now states that a
+  `<DEL>` allele's `SVLEN` extends a span as its `END` would. Codes,
+  planes, the sidecar and the container are unchanged, so readers of 0.2
+  read files of 0.3 (a window as an ordinary contig), and files of 0.1 and
+  0.2 remain valid.
 - **28 October 2026, version 0.2**: unphased calls that overlap other calls
   are put on the haplotype they fit (section 6.5). Two heterozygous calls
   that overlap cannot be on one haplotype, yet version 0.1 applied both as

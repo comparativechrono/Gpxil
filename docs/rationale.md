@@ -269,9 +269,18 @@ and the records that rule moves, and on dense simulated calls of every kind
 (overlapping indels, symbolic deletions and inversions, breakends, reference
 blocks, `*` alleles, haploid and missing genotypes), the two give the same
 planes and sidecars, base for base. Phase-set values that stand for
-identifiers other than numbers are the one exception: they are numbered from
-the calls converted, so the spec lets a window number them its own way and
-say so in `phase_set_ids`.
+identifiers other than numbers were at first numbered from the calls
+converted, so a window could number them its own way; but then two windows
+of one file numbered one phase set two ways, and a VCF made from them split
+it, or joined it to another. So version 0.3 numbers them from all the
+chromosome's phased calls, whichever are converted (section 5.5), and a
+window's values are its parent's. An independent review found that, and that
+records of overlapping windows written one window after the other lost the
+end of a deletion that one window cut and the next held whole: windows of
+one chromosome that overlap or touch are now read as one stretch of it,
+for VCF, comparisons and counts. On 116 windows of HG002's chromosome 17
+that form 41 such stretches, the records are those of one window per
+stretch, all 860 of them.
 
 Other forms were weighed. A window laid out on its parent's raster, its
 first base at the column it has in the whole chromosome, would keep pixels
