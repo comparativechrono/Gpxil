@@ -326,10 +326,10 @@ A call has a REF allele of length `m` starting at offset `p = POS − 1`; it
 covers the *span* `[p, p + m)`, extended to `[p, END)` (`END` being
 `INFO/END`, a 1-based inclusive position) for records with a symbolic allele
 and for reference blocks (section 6.3). A record whose `POS` lies outside the
-contig, or whose REF allele runs past its end, MUST be skipped and counted
-(`skipped_out_of_range`); a span that `END` extends past the end of the
-contig is cut at the end and counted (`clipped_to_contig_end`). REF and
-sequence ALT alleles are read case-insensitively.
+contig, or whose REF allele is empty or runs past its end, MUST be skipped
+and counted (`skipped_out_of_range`); a span that `END` extends past the end
+of the contig is cut at the end and counted (`clipped_to_contig_end`). REF
+and sequence ALT alleles are read case-insensitively.
 
 Each haplotype's allele is turned into per-base states over the span as
 follows:
@@ -466,19 +466,20 @@ statement; writers SHOULD count such bases (`ploidy_mismatches`).
   insertion or deletion), the offset before them, its anchor; a `<DEL>`
   allele occupies offsets `p .. END − 1`, any other symbolic allele offset
   `p` (section 6.3). An allele fits a haplotype unless an earlier call put
-  an ALT allele there that occupies an offset this one occupies. The same
-  allele again (the same cores at the same offset, `U` read as `T`; for a
-  symbolic allele, the same `p`, ALT and END), as when a record is written
-  twice, fits a haplotype that already has it. The REF allele `0`, a
-  missing allele `.`, an allele that writes nothing (section 6.2) and the
-  "any other allele" placeholders (section 6.3) occupy nothing and fit any
-  haplotype. If an allele does not fit the haplotype that the written order
-  gives it, and the two alleles swapped both fit, they are swapped
-  (counted as `overlapping_calls_reassigned`); otherwise they are applied
-  as written, and section 6.4 decides. Each call is placed against the
-  calls applied before it, phased or not, in file order, and after the rule
-  for `*` alleles above; phased genotypes are applied as written. For
-  example:
+  an ALT allele there that occupies an offset this one occupies, or put this
+  same allele on the other haplotype. The same allele again (the same cores
+  at the same offset, `U` read as `T`; for a symbolic allele, the same `p`,
+  ALT and END), as when a record is written twice, fits a haplotype that
+  already has it, so it goes there whichever way its genotype is written.
+  The REF allele `0`, a missing allele `.`, an allele that writes nothing
+  (section 6.2) and the "any other allele" placeholders (section 6.3)
+  occupy nothing and fit any haplotype. If an allele does not fit the
+  haplotype that the written order gives it, and the two alleles swapped
+  both fit, they are swapped (counted as `overlapping_calls_reassigned`);
+  otherwise they are applied as written, and section 6.4 decides. Each
+  call is placed against the calls applied before it, phased or not, in
+  file order, and after the rule for `*` alleles above; phased genotypes
+  are applied as written. For example:
 
   ```
   #CHROM POS REF ALT GT
@@ -964,9 +965,10 @@ far:
   12,079,785), and the comparisons then agree with a record-by-record check
   everywhere. New: the count
   `overlapping_calls_reassigned` (9.4), the version `"0.2"` (9.1) and its
-  schema. Made precise: an allele number is written in the digits 0-9
-  (6.2); two insertions differ if the sidecar stores different bases, two
-  COMPLEX alleles if their REF, ALT or END differ (6.4). Codes, planes, the
+  schema. Made precise: an allele number is written in the digits 0-9, and
+  a record with an empty REF is skipped (6.2); two insertions differ if the
+  sidecar stores different bases, two COMPLEX alleles if their REF, ALT or
+  END differ (6.4). Codes, planes, the
   sidecar and the container are unchanged, so readers of 0.1 read files of
   0.2, and files of 0.1 remain valid files of version 0.1.
 
