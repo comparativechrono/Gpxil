@@ -338,9 +338,9 @@ follows:
 - `.` (missing): UNKNOWN over the span.
 - `*` (spanning deletion): nothing is written; the deletion is described by
   the record that starts it (see also section 6.5).
-- an allele number with no matching ALT allele (negative, or larger than
-  the number of ALT alleles) or that is not a number: nothing is written;
-  the writer counts it (`bad_allele_index`).
+- an allele that is not a number written in the digits 0-9 (so `-1` and
+  `+1` are not), or whose number is larger than the number of ALT alleles:
+  nothing is written; the writer counts it (`bad_allele_index`).
 - a sequence allele `ALT`:
   1. Trim the longest common suffix of REF and ALT, except that when the
      lengths differ the trim MUST stop before consuming the whole shorter
@@ -416,13 +416,18 @@ So a record whose REF allele overlaps another record's variant never
 undoes that variant, whatever the record order, and overlapping records
 that use `*` combine correctly. Split multi-allelic records (two records at
 one position, each `0/1`) go one to each haplotype when they are unphased
-(section 6.5); phased, they cannot be resolved and show up as conflicts.
+(section 6.5). Phased, written `0|1` both, they are applied to haplotype 2
+as written, and only different strong states conflict: two substitutions
+do, but a deletion inside a longer one from the same anchor leaves the
+longer one, and no conflict.
 
 Insertions are added at their anchor base on their haplotype; two different
 insertions at the same base on the same haplotype are a conflict (last
-wins). The same holds for two different COMPLEX alleles at one base and
-haplotype. A COMPLEX state that a later call replaces takes its sidecar
-entry with it.
+wins), different meaning that the sidecar stores different bases (section
+7: inserted `R` and `Y` are both stored as `N`, so they don't conflict). The
+same holds for two different COMPLEX alleles at one base and haplotype:
+alleles whose REF, ALT or END differ. A COMPLEX state that a later call
+replaces takes its sidecar entry with it.
 
 A call never meets the initial states of section 6.1 as a conflict: they are
 not asserted. In particular a diploid call inside a haploid region writes
@@ -452,22 +457,28 @@ statement; writers SHOULD count such bases (`ploidy_mismatches`).
   written order gives `*`, the two alleles are swapped (counted as
   `spanning_deletions_reassigned`). Phased genotypes are applied as written.
 - In an unphased diploid genotype whose two alleles differ and neither is
-  `*`, the order of the alleles carries no meaning either, but two
-  heterozygous calls that overlap cannot both be on one haplotype: written
-  `0/1`, both would go to haplotype 2 and run together. So each allele goes
-  to a haplotype it *fits*. An allele fits a haplotype unless, at some base
-  of the span, it would write REF or a strong state where that haplotype is
-  already asserted with a different strong state (section 6.4), or it would
-  insert bases after a base where that haplotype already has a different
-  insertion, or write a COMPLEX allele where it already has a different
-  one. The REF allele `0`, a missing allele `.` and an allele that writes
-  nothing (section 6.2) fit any haplotype. If an allele does not fit the
-  haplotype that the written order gives it, and the two alleles swapped
-  both fit, they are swapped (counted as `overlapping_calls_reassigned`);
-  otherwise they are applied as written, and section 6.4 decides. Each call
-  is placed against the calls applied before it, in file order, and after
-  the rule for `*` alleles above; phased genotypes are applied as written.
-  For example:
+  `*`, the order of the alleles carries no meaning either. But calls that
+  overlap are alternatives at one place: the ALT alleles of two
+  heterozygous calls that overlap cannot both be on one haplotype, and
+  written `0/1`, both would go to haplotype 2 and run together. So each
+  allele goes to a haplotype it *fits*. An ALT allele *occupies* the offsets
+  of its cores (section 6.2, step 3) and, when one core is empty (a plain
+  insertion or deletion), the offset before them, its anchor; a `<DEL>`
+  allele occupies offsets `p .. END − 1`, any other symbolic allele offset
+  `p` (section 6.3). An allele fits a haplotype unless an earlier call put
+  an ALT allele there that occupies an offset this one occupies. The same
+  allele again (the same cores at the same offset, `U` read as `T`; for a
+  symbolic allele, the same `p`, ALT and END), as when a record is written
+  twice, fits a haplotype that already has it. The REF allele `0`, a
+  missing allele `.`, an allele that writes nothing (section 6.2) and the
+  "any other allele" placeholders (section 6.3) occupy nothing and fit any
+  haplotype. If an allele does not fit the haplotype that the written order
+  gives it, and the two alleles swapped both fit, they are swapped
+  (counted as `overlapping_calls_reassigned`); otherwise they are applied
+  as written, and section 6.4 decides. Each call is placed against the
+  calls applied before it, phased or not, in file order, and after the rule
+  for `*` alleles above; phased genotypes are applied as written. For
+  example:
 
   ```
   #CHROM POS REF ALT GT
@@ -475,12 +486,24 @@ statement; writers SHOULD count such bases (`ploidy_mismatches`).
   chr1   102 CT  C   0/1
   ```
 
-  The second record's ALT allele keeps its first base, offset 101, which
-  the first record deletes on haplotype 2, so it does not fit haplotype 2;
-  it goes to haplotype 1, and its REF allele to haplotype 2. Haplotype 2
-  then carries the first deletion (offsets 100-101) and haplotype 1 the
-  second (offset 102), as the records mean, not one deletion of three
-  bases.
+  The first record's ALT allele occupies offsets 99-101 of haplotype 2: its
+  anchor, and the two bases it deletes. The second's occupies offsets
+  101-102, its anchor (a base the first deletes) and the base it deletes,
+  so it does not fit haplotype 2; it goes to haplotype 1, and its REF
+  allele to haplotype 2. Haplotype 2 then carries the first deletion
+  (offsets 100-101) and haplotype 1 the second (offset 102), as the records
+  mean, not one deletion of three bases.
+
+  Because an allele occupies what it changes and no more, split
+  multi-allelic records (two records at one position, each `0/1`) go one to
+  each haplotype, whatever their alleles, unless they change different
+  bases of a longer REF (REF `CG`, ALT `TG` and `CA`: two substitutions,
+  one at each base), which occupy no offset in common and are applied as
+  written. And an allele padded to the REF of a multi-allelic record
+  occupies only what it changes: in `CTTTA` to `CTA,C` with genotype `1/2`,
+  `CTA` occupies the offsets of `CTT` to `C`, so a heterozygous call at the
+  record's last base, which only `C` deletes, goes to the haplotype of
+  `CTA`.
 - Flags accumulate (bitwise OR) over all calls covering a base.
   VARIANT_SITE is set over the span of every call; FILTERED over the span of
   every call whose FILTER is neither `PASS` nor `.`.
@@ -933,15 +956,19 @@ far:
   that overlap cannot be on one haplotype, yet version 0.1 applied both as
   written, to haplotype 2, where they ran together: two deletions became
   one, and an insertion followed a base that another call deletes. Split
-  multi-allelic records, unphased, now go one to each haplotype. Comparing
-  HG002's two GIAB benchmarks, and HG002 with his parents, base by base
-  found the problem; on chromosome 17 of the three v4.2.1 benchmarks the
-  rule moves 26 of 320,884 records to the other haplotype, and the
-  comparisons then agree with a record-by-record check everywhere. New: the count
+  multi-allelic records, unphased, now go one to each haplotype, unless
+  their alleles change different bases. Comparing HG002's two GIAB
+  benchmarks, and HG002 with his parents, base by base found the problem;
+  on chromosome 17 of the three v4.2.1 benchmarks the rule moves 26 of
+  320,884 records to the other haplotype (on their 22 autosomes, 687 of
+  12,079,785), and the comparisons then agree with a record-by-record check
+  everywhere. New: the count
   `overlapping_calls_reassigned` (9.4), the version `"0.2"` (9.1) and its
-  schema. Codes, planes, the sidecar and the container are unchanged, so
-  readers of 0.1 read files of 0.2, and files of 0.1 remain valid files of
-  version 0.1.
+  schema. Made precise: an allele number is written in the digits 0-9
+  (6.2); two insertions differ if the sidecar stores different bases, two
+  COMPLEX alleles if their REF, ALT or END differ (6.4). Codes, planes, the
+  sidecar and the container are unchanged, so readers of 0.1 read files of
+  0.2, and files of 0.1 remain valid files of version 0.1.
 
 Version 0.1:
 

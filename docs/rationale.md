@@ -203,12 +203,28 @@ base by base on chromosome 17 (`gpxil compare`), 84 of the 85 stretches where
 they differed agreed with a check made record by record from the VCFs; the
 85th was two deletions of v4.2.1 joined into one. HG002 against his parents
 had one Mendelian error for the same reason. Version 0.2 puts each allele on
-a haplotype it fits (specification section 6.5). On chromosome 17 of the
-v4.2.1 benchmarks of HG002, HG003 and HG004 it moves 26 of 320,884 records
-to the other haplotype: 6 deletions whose first base another deletion
-removes, and 20 insertions after such a base. Every differing stretch and
+a haplotype it fits (specification section 6.5): calls that overlap are
+alternatives at one place, so an ALT allele does not go where an earlier
+call's ALT allele occupies one of its offsets (the bases it changes, and the
+anchor of an insertion or deletion). On chromosome 17 of the v4.2.1
+benchmarks of HG002, HG003 and HG004 it moves 26 of 320,884 records to the
+other haplotype, and on their 22 autosomes 687 of 12,079,785: every one a
+deletion or insertion whose first base another call deletes on the haplotype
+its written order gives it. On chromosome 17, every differing stretch and
 every Mendelian error then agrees with the record check, and the artefactual
-error is gone ([Gpxil-scratchpad, experiment 03](https://github.com/comparativechrono/gpxil-scratchpad/tree/main/experiments/03-compare)).
+error is gone
+([Gpxil-scratchpad, experiment 03](https://github.com/comparativechrono/gpxil-scratchpad/tree/main/experiments/03-compare)).
+
+Two other forms of the rule were weighed. Comparing the states the alleles
+would write (an allele does not fit where it would write over a different
+variant) moves the same 687 records, but lets split multi-allelic records
+run together wherever their states agree (a deletion inside a longer one
+from the same anchor), and parts a deletion and a substitution at its anchor
+in one order of the records but not the other. Letting an allele occupy its
+record's whole REF misses records after a multi-allelic record, whose
+alleles are padded to its longest REF: after `CTTTA` to `CTA,C`, a deletion
+at the last base, which only `C` deletes, belongs with `CTA`, which leaves
+that base as it is.
 
 ## 6. Whole genome
 
