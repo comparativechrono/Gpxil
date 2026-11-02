@@ -58,7 +58,7 @@ use it.
 
 ## See it
 
-The [Gpxil browser](https://comparativechrono.github.io/Gpxil-browser/) shows
+The [Gpxil browser](https://pixelverse.cam/) shows
 the GRCh38 reference as gpxil, from the karyotype down to single bases, and
 offers the files for download. Single genes, transcripts and proteins come as
 [pxil](https://github.com/comparativechrono/pxil) files, a lighter format for
